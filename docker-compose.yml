@@ -1,0 +1,37 @@
+version: '3.8'
+services:
+  github-monitor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: github-monitor
+    volumes:
+      - type: bind
+        source: .
+        target: /app/src
+        read_only: true
+      - type: volume
+        source: pipecdn-data
+        target: /app/data
+    environment:
+      - TZ=Asia/Shanghai
+      - PYTHONUNBUFFERED=1
+      - IS_DOCKER=true
+      - HTTP_PROXY=http://host.docker.internal:7890
+      - HTTPS_PROXY=http://host.docker.internal:7890
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "ps", "aux", "|", "grep", "main.py"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  pipecdn-data:
