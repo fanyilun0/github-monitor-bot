@@ -1,7 +1,6 @@
 import asyncio
 import aiohttp
 from datetime import datetime, timedelta
-import random
 import logging
 
 # 导入配置
@@ -12,7 +11,6 @@ from config import (
     USE_PROXY, 
     INTERVAL, 
     TIME_OFFSET,
-    ALWAYS_NOTIFY,
     APP_NAME,
     REPOS_CONFIG
 )
@@ -29,13 +27,6 @@ def setup_logging():
 
 logger = setup_logging()
 
-# 随机延迟函数
-async def random_delay():
-    """生成随机延迟时间（10-20秒）"""
-    delay = random.uniform(10, 20)
-    logger.info(f"等待 {delay:.2f} 秒...")
-    await asyncio.sleep(delay)
-
 async def fetch_commits(session, owner, repo):
     """获取仓库最新提交"""
     api_url = f"{GITHUB_API}/repos/{owner}/{repo}/commits"
@@ -50,13 +41,22 @@ async def fetch_commits(session, owner, repo):
                 commits = await response.json()
                 if commits:
                     latest_commit = commits[0]  # 获取最新的提交
-                    return {
-                        'sha': latest_commit['sha'],
-                        'message': latest_commit['commit']['message'],
-                        'author': latest_commit['commit']['author']['name'],
-                        'date': latest_commit['commit']['author']['date'],
-                        'url': latest_commit['html_url']
-                    }
+                    
+                    # 获取详细的commit信息
+                    commit_url = f"{GITHUB_API}/repos/{owner}/{repo}/commits/{latest_commit['sha']}"
+                    async with session.get(commit_url, headers=headers, ssl=False) as detail_response:
+                        if detail_response.status == 200:
+                            commit_detail = await detail_response.json()
+                            changed_files = [file['filename'] for file in commit_detail['files']]
+                            
+                            return {
+                                'sha': latest_commit['sha'],
+                                'message': latest_commit['commit']['message'],
+                                'author': latest_commit['commit']['author']['name'],
+                                'date': latest_commit['commit']['author']['date'],
+                                'url': latest_commit['html_url'],
+                                'files': changed_files  # 添加变更文件列表
+                            }
             logger.error(f"获取提交失败: {response.status}")
             return None
     except Exception as e:
@@ -141,7 +141,6 @@ async def monitor_repos(interval, webhook_url, use_proxy, proxy_url):
                         new_commits[repo_name] = commit
                         # 更新上次检查的commit SHA
                         previous_commits[repo_name] = commit['sha']
-                    await random_delay()
             
             if new_commits:  # 有新提交时才发送消息
                 message = build_message(new_commits)
@@ -153,7 +152,7 @@ async def monitor_repos(interval, webhook_url, use_proxy, proxy_url):
             
         except Exception as e:
             logger.error(f"监控过程出错: {str(e)}")
-            await asyncio.sleep(5)
+            await asyncio.sleep(5)  # 保留错误后的短暂延迟
             continue
             
         await asyncio.sleep(interval)
