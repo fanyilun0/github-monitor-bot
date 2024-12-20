@@ -68,7 +68,15 @@ def build_message(repo_commits):
     adjusted_time = datetime.now() + timedelta(hours=TIME_OFFSET)
     timestamp = adjusted_time.strftime('%Y-%m-%d %H:%M:%S')
     
-    message = f"🔍 【{APP_NAME} 状态报告】\n⏰ 时间: {timestamp}\n\n"
+    # 计算下一次检查时间
+    next_check = adjusted_time + timedelta(seconds=INTERVAL)
+    next_check_str = next_check.strftime('%Y-%m-%d %H:%M:%S')
+    
+    message = (
+        f"🔍 【{APP_NAME} 状态报告】\n"
+        f"⏰ 当前时间: {timestamp}\n"
+        f"⏭ 下次检查: {next_check_str}\n\n"
+    )
     
     for repo_name, commit in repo_commits.items():
         message += (
@@ -133,6 +141,10 @@ async def monitor_repos(interval, webhook_url, use_proxy, proxy_url):
             logger.info(f"\n开始第 {iteration} 轮检查...")
             new_commits = {}
             
+            # 解析仓库配置并输出正在监听的仓库  
+            for repo_config in REPOS_CONFIG:
+                logger.info(f"正在监听仓库📦 : {repo_config['name']}")
+
             async with aiohttp.ClientSession() as session:
                 for repo_config in REPOS_CONFIG:
                     result = await monitor_single_repo(session, repo_config, previous_commits)
